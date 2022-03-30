@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+OTP_LIST="beam beamasm24 beamasm25" # hipe erllvm"
+
 ## Erlc flags to be used in each case:
 HIPE_FLAGS="+native +'{hipe,[{regalloc,coalescing},o2]}'"
 ERLLVM_FLAGS="+native +'{hipe,[o2,to_llvm]}'"
@@ -69,7 +71,7 @@ run_class ()
       for l in `seq 1 $ITERATIONS`; do
         echo "   --- regexdna"
         exec 3>&1 4>&2
-        time=$( { time  `$OTP/bin/erl -pa ebin/shootout -smp disable -noshell \
+        time=$( { time  `$OTP/bin/erl -pa ebin/shootout +S 1 -noshell \
             -run -noinput -run regexdna main 0 < regexdna-input.txt > /dev/null` \
             1>&3 2>&4; } 2>&1 )  # Captures time only.
         exec 3>&- 4>&-
@@ -79,7 +81,7 @@ run_class ()
       for l in `seq 1 $ITERATIONS`; do
         echo "   --- knucleotide"
         exec 3>&1 4>&2
-        time=$( { time  `$OTP/bin/erl -pa ebin/shootout -smp disable -noshell \
+        time=$( { time  `$OTP/bin/erl -pa ebin/shootout +S 1 -noshell \
             -run knucleotide main 0 < knucleotide-input.txt > /dev/null` \
             1>&3 2>&4; } 2>&1 )  # Captures time only.
         exec 3>&- 4>&-
@@ -89,7 +91,7 @@ run_class ()
       for l in `seq 1 $ITERATIONS`; do
         echo "   --- revcomp"
         exec 3>&1 4>&2
-        time=$( { time  `$OTP/bin/erl -pa ebin/shootout -smp disable -noshell \
+        time=$( { time  `$OTP/bin/erl -pa ebin/shootout +S 1 -noshell \
             -run revcomp main 0 < revcomp-input.txt > /dev/null` \
             1>&3 2>&4; } 2>&1 )  # Captures time only.
         exec 3>&- 4>&-
@@ -104,14 +106,33 @@ run_benchmark ()
 
     EBIN_DIRS=`find ebin/ -maxdepth 1 -mindepth 1 -type d`
 
-    $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run \
-        $BENCH $COMP $ITERATIONS -s erlang halt
+    echo $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt
+    $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt
 }
 
 collect_results ()
 {
     echo "Collecting results..."
 
+    echo "### Benchmark BEAM/BEAMASM24  BEAM/BEAMASM25  BEAM    BEAMASM24   BEAMASM25 (secs)" \
+        > results/runtime.res
+    pr -m -t results/runtime_beam.res results/runtime_beamasm24.res \
+        results/runtime_beamasm25.res \
+        | gawk '{print $1 "\t" $2/$4 "\t" $2/$6 "\t\t" $2 "\t" $4 "\t" $6}' \
+        >> results/runtime.res
+    ## Print average performance results of current execution:
+    awk '{btl += $2; htl += $3} END {print "Runtime BTL:", btl/(NR-1), \
+        "Runtime HTL:", htl/(NR-1)}' results/runtime.res
+
+    echo "### Standard deviation BEAM BEAMASM24 BEAMASM25 (millisecs)" \
+        > results/runtime-err.res
+    pr -m -t results/runtime_beam-err.res results/runtime_beamasm24-err.res \
+        results/runtime_beamasm25-err.res \
+        | gawk '{print $1 "\t" $2 "\t" $4 "\t" $6}' \
+        >> results/runtime-err.res
+
+    return
+    # original code
     echo "### Benchmark BEAM/ErLLVM HiPE/ErLLVM BEAM HiPE ErLLVM (secs)" \
         > results/runtime.res
     pr -m -t results/runtime_beam.res results/runtime_hipe.res \
@@ -145,8 +166,11 @@ plot_diagram ()
     cp $SCRIPTS_DIR/speedup.perf $TMP_PERF
     cat results/$INPUT | awk '{print $1 "\t " $2 "\t " $3}' >> $TMP_PERF
 
+    cat $TMP_PERF
+
     ## Create diagram in diagram:
-    $SCRIPTS_DIR/bargraph.pl $TMP_PERF > $DIAGRAMS_DIR/$HASH.eps 2> /dev/null
+    echo "$SCRIPTS_DIR/bargraph.pl $TMP_PERF > $DIAGRAMS_DIR/$HASH.eps"
+    $SCRIPTS_DIR/bargraph.pl $TMP_PERF > $DIAGRAMS_DIR/$HASH.eps
     rm -rf $TMP_DIR
 }
 
@@ -243,15 +267,15 @@ EOF
     fi
 
     echo "Executing $ITERATIONS iterations/benchmark."
-    for COMP in "beam" "hipe" "erllvm"; do
+    for COMP in $OTP_LIST; do
+        ## Proper compile
+        make clean > /dev/null
         ## Remove intermediate files from un-completed former run
         if [ -r results/runtime_$COMP.res ]; then
           rm results/runtime_$COMP.res
           touch results/runtime_$COMP.res
         fi
 
-        ## Proper compile
-        make clean > /dev/null
         echo -n "  Re-compiling with $COMP. "
         ## Use the appropriate ERLC flags
         ERL_CFLAGS=
@@ -279,9 +303,15 @@ EOF
 
     ## Backup all result files & diagrams to unique .res files:
     NEW_SUFFIX=`date +"%y.%m.%d-%H:%M:%S"`
-    for c in "" "_beam" "_hipe" "_erllvm"; do
-        mv results/runtime$c.res results/runtime$c-$NEW_SUFFIX.res
-        mv results/runtime$c-err.res results/runtime$c-err-$NEW_SUFFIX.res
+
+    # move main results
+    mv results/runtime.res results/runtime-$NEW_SUFFIX.res
+    mv results/runtime-err.res results/runtime-err-$NEW_SUFFIX.res
+
+    # move individual results
+    for c in $OTP_LIST; do
+        mv results/runtime_$c.res results/runtime_$c-$NEW_SUFFIX.res
+        mv results/runtime_$c-err.res results/runtime_$c-err-$NEW_SUFFIX.res
     done;
     mv diagrams/runtime.eps diagrams/runtime-$NEW_SUFFIX.eps
 }
