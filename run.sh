@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-OTP_LIST="beam beamasm24 beamasm25" # hipe erllvm"
+OTP_LIST="beam beamasm24 beamasm25 hipe erllvm"
 
 ## Erlc flags to be used in each case:
 HIPE_FLAGS="+native +'{hipe,[{regalloc,coalescing},o2]}'"
@@ -8,12 +8,43 @@ ERLLVM_FLAGS="+native +'{hipe,[o2,to_llvm]}'"
 
 ## All arguments are made globals:
 ACTION=      # The run function to be executed (run_all, run_class)
+METRIC="runtime"
 OTP=         # The OTP to be used for erlc and erl
 COMP=        # The name of the compiler (beam, hipe, erllvm)
 CLASS=       # The class of benchmarks to be executed
 BENCH=       # The name of the benchmark to be executed
 ITERATIONS=2 # Number of executions of benchmarks to collect statistics
 DEBUG=0      # Debug mode (0=Off, 1=On)
+
+benchmark_compile ()
+{
+    echo "[$COMP] Running benchmark for compilation" 
+    if [ "$COMP" = "beam" ]; then
+        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" compile > /dev/null 2>&1 &
+        spinner $(pidof make)
+    fi
+
+    if [ "$COMP" = "hipe" ]; then
+        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" compile > /dev/null 2>&1 &
+        spinner $(pidof make)
+    fi
+
+    if [ "$COMP" = "erllvm" ]; then
+        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" compile > /dev/null 2>&1 &
+        spinner $(pidof make)
+    fi
+
+    if [ "$COMP" = "beamasm24" ]; then
+        cp results/compile_beam.res results/compile.res
+    fi
+
+    if [ "$COMP" = "beamasm25" ]; then
+        cp results/compile_beam.res results/compile.res
+    fi
+    
+    mv results/compile.res results/compile_$COMP.res
+
+}
 
 run_all ()
 {
@@ -59,45 +90,6 @@ run_class ()
         ## Else run benchmark
         run_benchmark
     done
-
-    if [ "$CLASS" = "shootout" ]; then
-      ## Generate inputs for testcases that need input from stdin
-      echo "  Generating appropriate inputs for benchmarks"
-      ./fasta  5000000 > regexdna-input.txt
-      ./fasta 25000000 > knucleotide-input.txt
-      cp knucleotide-input.txt revcomp-input.txt
-
-      ## Execute the bad benchmarks
-      for l in `seq 1 $ITERATIONS`; do
-        echo "   --- regexdna"
-        exec 3>&1 4>&2
-        time=$( { time  `$OTP/bin/erl -pa ebin/shootout +S 1 -noshell \
-            -run -noinput -run regexdna main 0 < regexdna-input.txt > /dev/null` \
-            1>&3 2>&4; } 2>&1 )  # Captures time only.
-        exec 3>&- 4>&-
-        echo "regex-dna" $time >> results/shootout_with_input
-      done
-
-      for l in `seq 1 $ITERATIONS`; do
-        echo "   --- knucleotide"
-        exec 3>&1 4>&2
-        time=$( { time  `$OTP/bin/erl -pa ebin/shootout +S 1 -noshell \
-            -run knucleotide main 0 < knucleotide-input.txt > /dev/null` \
-            1>&3 2>&4; } 2>&1 )  # Captures time only.
-        exec 3>&- 4>&-
-        echo "k-nucleotide" $time >> results/shootout_with_input
-      done
-
-      for l in `seq 1 $ITERATIONS`; do
-        echo "   --- revcomp"
-        exec 3>&1 4>&2
-        time=$( { time  `$OTP/bin/erl -pa ebin/shootout +S 1 -noshell \
-            -run revcomp main 0 < revcomp-input.txt > /dev/null` \
-            1>&3 2>&4; } 2>&1 )  # Captures time only.
-        exec 3>&- 4>&-
-        echo "reverse-complement" $time >> results/shootout_with_input
-       done
-    fi
 }
 
 run_benchmark ()
@@ -106,48 +98,38 @@ run_benchmark ()
 
     EBIN_DIRS=`find ebin/ -maxdepth 1 -mindepth 1 -type d`
 
-    echo $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt
-    $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt
+    echo $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt +S 1
+    $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt +S 1
 }
 
 collect_results ()
 {
     echo "Collecting results..."
 
-    echo "### Benchmark BEAM/BEAMASM24  BEAM/BEAMASM25  BEAM    BEAMASM24   BEAMASM25 (secs)" \
-        > results/runtime.res
-    pr -m -t results/runtime_beam.res results/runtime_beamasm24.res \
-        results/runtime_beamasm25.res \
-        | gawk '{print $1 "\t" $2/$4 "\t" $2/$6 "\t\t" $2 "\t" $4 "\t" $6}' \
-        >> results/runtime.res
+    local _FILES=""
+
+    for COMP in $OTP_LIST; do
+        _FILES="${_FILES} results/${METRIC}_${COMP}.res"
+    done
+
+    echo "### Benchmark BEAM/BEAMASM24  BEAM/BEAMASM25  BEAM/HIPE   BEAM/ERLLVM BEAM    BEAMASM24   BEAMASM25   HIPE    ERLLVM (secs)" \
+        > results/$METRIC.res
+    pr -J -m -t $_FILES \
+        | gawk '{print $1 "\t" $2/$4 "\t" $2/$6 "\t" $2/$8 "\t" $2/$10 "\t\t" $2 "\t" $4 "\t" $6 "\t" $8 "\t" $10}' \
+        >> results/$METRIC.res
     ## Print average performance results of current execution:
     awk '{btl += $2; htl += $3} END {print "Runtime BTL:", btl/(NR-1), \
-        "Runtime HTL:", htl/(NR-1)}' results/runtime.res
+        "Runtime HTL:", htl/(NR-1)}' results/$METRIC.res
+
+    if [ "$METRIC" = "compile" ]; then
+        return
+    fi
 
     echo "### Standard deviation BEAM BEAMASM24 BEAMASM25 (millisecs)" \
         > results/runtime-err.res
     pr -m -t results/runtime_beam-err.res results/runtime_beamasm24-err.res \
-        results/runtime_beamasm25-err.res \
-        | gawk '{print $1 "\t" $2 "\t" $4 "\t" $6}' \
-        >> results/runtime-err.res
-
-    return
-    # original code
-    echo "### Benchmark BEAM/ErLLVM HiPE/ErLLVM BEAM HiPE ErLLVM (secs)" \
-        > results/runtime.res
-    pr -m -t results/runtime_beam.res results/runtime_hipe.res \
-        results/runtime_erllvm.res \
-        | gawk '{print $1 "\t" $2/$6 "\t" $4/$6 "\t\t" $2 "\t" $4 "\t" $6}' \
-        >> results/runtime.res
-    ## Print average performance results of current execution:
-    awk '{btl += $2; htl += $3} END {print "Runtime BTL:", btl/(NR-1), \
-        "Runtime HTL:", htl/(NR-1)}' results/runtime.res
-
-    echo "### Standard deviation BEAM HiPE ErLLVM (millisecs)" \
-        > results/runtime-err.res
-    pr -m -t results/runtime_beam-err.res results/runtime_hipe-err.res \
-        results/runtime_erllvm-err.res \
-        | gawk '{print $1 "\t" $2 "\t" $4 "\t" $6}' \
+        results/runtime_beamasm25-err.res results/runtime_hipe-err.res results/runtime_erllvm-err.res \
+        | gawk '{print $1 "\t" $2 "\t" $4 "\t" $6 "\t" $8 "\t" $10}' \
         >> results/runtime-err.res
 }
 
@@ -164,7 +146,7 @@ plot_diagram ()
     mkdir -p $TMP_DIR
     ## Copy speedup.perf template and append only speedups:
     cp $SCRIPTS_DIR/speedup.perf $TMP_PERF
-    cat results/$INPUT | awk '{print $1 "\t " $2 "\t " $3}' >> $TMP_PERF
+    cat results/$INPUT | awk '{print $1 "\t " $2 "\t " $3 "\t " $4 "\t " $5}' >> $TMP_PERF
 
     cat $TMP_PERF
 
@@ -222,7 +204,7 @@ EOF
 
 main ()
 {
-    while getopts "hadn:c:" OPTION; do
+    while getopts "hadnm:c:" OPTION; do
         case $OPTION in
             h|\?)
                 usage
@@ -237,6 +219,9 @@ main ()
                 ;;
             n)
                 ITERATIONS=$OPTARG
+                ;;
+            m)
+                METRIC=$OPTARG
                 ;;
             d)
                 DEBUG=1
@@ -268,12 +253,18 @@ EOF
 
     echo "Executing $ITERATIONS iterations/benchmark."
     for COMP in $OTP_LIST; do
+
         ## Proper compile
         make clean > /dev/null
         ## Remove intermediate files from un-completed former run
-        if [ -r results/runtime_$COMP.res ]; then
-          rm results/runtime_$COMP.res
-          touch results/runtime_$COMP.res
+        if [ -r results/$METRIC_$COMP.res ]; then
+          rm results/$METRIC_$COMP.res
+          touch results/$METRIC_$COMP.res
+        fi
+
+        if [ "$METRIC" = "compile" ]; then
+            benchmark_compile
+            continue
         fi
 
         echo -n "  Re-compiling with $COMP. "
@@ -299,21 +290,21 @@ EOF
     collect_results
 
     ## Plot results:
-    plot_diagram runtime.res
+    plot_diagram $METRIC.res
 
     ## Backup all result files & diagrams to unique .res files:
     NEW_SUFFIX=`date +"%y.%m.%d-%H:%M:%S"`
 
     # move main results
-    mv results/runtime.res results/runtime-$NEW_SUFFIX.res
-    mv results/runtime-err.res results/runtime-err-$NEW_SUFFIX.res
+    mv results/$METRIC.res results/$METRIC-$NEW_SUFFIX.res
+    mv results/$METRIC-err.res results/$METRIC-err-$NEW_SUFFIX.res
 
     # move individual results
     for c in $OTP_LIST; do
-        mv results/runtime_$c.res results/runtime_$c-$NEW_SUFFIX.res
-        mv results/runtime_$c-err.res results/runtime_$c-err-$NEW_SUFFIX.res
+        mv results/$METRIC\_$c.res results/$METRIC\_$c-$NEW_SUFFIX.res
+        mv results/$METRIC\_$c-err.res results/$METRIC\_$c-err-$NEW_SUFFIX.res
     done;
-    mv diagrams/runtime.eps diagrams/runtime-$NEW_SUFFIX.eps
+    mv diagrams/$METRIC.eps diagrams/$METRIC-$NEW_SUFFIX.eps
 }
 
 main $@

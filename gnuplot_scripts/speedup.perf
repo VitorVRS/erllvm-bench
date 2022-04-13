@@ -1,8 +1,8 @@
 ###
 ### Clustered graph example from http://www.burningcutlery.com/derek/bargraph/
 ###
-=cluster;BEAM / BEAMASM24;BEAM / BEAMASM25
-colors=med_blue,light_green
+=cluster;BEAM / BEAMASM24;BEAM / BEAMASM25;BEAM / HIPE;BEAM / ERLLVM
+colors=med_blue,light_green,red,black
 =arithmean
 meanlabel=Average
 yformat=%g

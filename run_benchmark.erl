@@ -9,17 +9,17 @@ run([Module, Comp, N]) ->
   bench_file(Module, Comp, list_to_integer(atom_to_list(N))).
 
 bench_file(File, Comp, N) ->
-  case File of
-    prettypr ->
-      case get(prettypr_data) of
-	undefined -> {ok,[X]} =
-	  file:consult("prettypr.input"),
-	  put(prettypr_data, X),
-	  ok;
-	_ -> ok
-      end;
-    _ -> ok
-  end,
+    case File of
+        prettypr ->
+            case get(prettypr_data) of
+                undefined -> {ok,[X]} =
+                             file:consult("prettypr.input"),
+                             put(prettypr_data, X),
+                             ok;
+                _ -> ok
+            end;
+        _ -> ok
+    end,
   T = run_bench(File, N),
   %% Write results/errors to files:
   ResFile = lists:concat(["results/runtime_", Comp, ".res"]),
@@ -33,6 +33,7 @@ run_bench(File, N) when is_integer(N) ->
   Myself = self(),
   Opts = [], %[{min_heap_size, 100000000}],
   Size = medium,
+  io:format("DEBUG: Module: ~p - info(): ~p~n", [File, File:module_info()]),
   ModExports = element(2, lists:keyfind(exports, 1, File:module_info())),
   Args =
     case lists:member({Size,0}, ModExports) of

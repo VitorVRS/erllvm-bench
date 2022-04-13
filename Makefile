@@ -21,7 +21,7 @@ $(error fig2ps is required but it is not found! Aborting.)
 endif
 
 
-.PHONY: all check clean distclean
+.PHONY: all check clean distclean compile
 
 all: $(BEAM_FILES) fasta
 	@(cd src && make EBIN_DIR=../$(EBIN_DIR) ERLC=$(ERLC) ERL_COMPILE_FLAGS="$(ERL_COMPILE_FLAGS)" $@)
@@ -38,3 +38,7 @@ clean:
 
 distclean: clean
 	$(RM) -rI diagrams/ results/ ebin/
+
+
+compile:
+	@(cd src && make EBIN_DIR=../$(EBIN_DIR) ERLC=$(ERLC) ERL_COMPILE_FLAGS="$(ERL_COMPILE_FLAGS)" compile)
