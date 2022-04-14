@@ -5,10 +5,11 @@
 
 -include("stats.hrl").
 
-run([Module, Comp, N]) ->
-  bench_file(Module, Comp, list_to_integer(atom_to_list(N))).
+run([Metric, Class, Module, Comp, N]) ->
+  bench_file(Metric, Class, Module, Comp, list_to_integer(atom_to_list(N))).
 
-bench_file(File, Comp, N) ->
+
+bench_file(Metric, Class, File, Comp, N) ->
     case File of
         prettypr ->
             case get(prettypr_data) of
@@ -20,20 +21,21 @@ bench_file(File, Comp, N) ->
             end;
         _ -> ok
     end,
-  T = run_bench(File, N),
+  T = run_bench(Metric, Class, Comp, File, N),
+%  io:format("DEBUG: File: ~p~n", [T]),
   %% Write results/errors to files:
-  ResFile = lists:concat(["results/runtime_", Comp, ".res"]),
+  ResFile = lists:concat(["results/", Metric, "_", Comp, ".res"]),
   file:write_file(ResFile, io_lib:fwrite("~w\t~.3f\n", [File, T#stat.median])
                   , [append]),
-  ErrFile = lists:concat(["results/runtime_", Comp, "-err.res"]),
+  ErrFile = lists:concat(["results/", Metric, "_", Comp, "-err.res"]),
   file:write_file(ErrFile, io_lib:fwrite("~w\t~.3f\n", [File, T#stat.stddev])
                   , [append]).
 
-run_bench(File, N) when is_integer(N) ->
+run_bench(runtime, _Class, _Comp, File, N) when is_integer(N) ->
   Myself = self(),
   Opts = [], %[{min_heap_size, 100000000}],
   Size = medium,
-  io:format("DEBUG: Module: ~p - info(): ~p~n", [File, File:module_info()]),
+%  io:format("DEBUG: Module: ~p - info(): ~p~n", [File, File:module_info()]),
   ModExports = element(2, lists:keyfind(exports, 1, File:module_info())),
   Args =
     case lists:member({Size,0}, ModExports) of
@@ -47,6 +49,39 @@ run_bench(File, N) when is_integer(N) ->
                 %% Use a runner in order to catch the exiting exception.
                 Runner = fun () -> try
                                      File:main(Args)
+                                   catch
+                                     exit:ok -> ok;
+                                     _:_ -> badexit
+                                   end
+                         end,
+                Times = stats:test_avg(Runner, [], N),
+                Myself ! Times,
+                file:close(F)
+            end, Opts),
+  receive
+    Result -> Result
+  end;
+
+run_bench(compile, Class, Comp, File, N) ->
+%    io:format("DEBUG: File: ~p~n", [lists:concat(["src/", Class, "/", File, ".erl"])]),
+  ErlFile = lists:concat(["src/", Class, "/", File, ".erl"]),
+  Myself = self(),
+  Opts = [],
+  spawn_opt(fun () ->
+                %% Supress IO
+                {ok, F} = file:open("io_file", [write]),
+                group_leader(F, self()),
+                %% Use a runner in order to catch the exiting exception.
+                Runner = fun () -> try
+                                       case Comp of
+                                           hipe ->
+                                               c:c(ErlFile, [native, {hipe, [{regalloc,coalescing},o2]}, {outdir, "ebin"}]);
+                                           erllvm ->
+                                               c:c(ErlFile, [native, {hipe, [o2,to_llvm]}, {outdir, "ebin"}]);
+
+                                           _ ->
+                                               c:c(ErlFile, [{outdir, "ebin"}])
+                                       end
                                    catch
                                      exit:ok -> ok;
                                      _:_ -> badexit

@@ -16,42 +16,12 @@ BENCH=       # The name of the benchmark to be executed
 ITERATIONS=2 # Number of executions of benchmarks to collect statistics
 DEBUG=0      # Debug mode (0=Off, 1=On)
 
-benchmark_compile ()
-{
-    echo "[$COMP] Running benchmark for compilation" 
-    if [ "$COMP" = "beam" ]; then
-        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" compile > /dev/null 2>&1 &
-        spinner $(pidof make)
-    fi
-
-    if [ "$COMP" = "hipe" ]; then
-        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" compile > /dev/null 2>&1 &
-        spinner $(pidof make)
-    fi
-
-    if [ "$COMP" = "erllvm" ]; then
-        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" compile > /dev/null 2>&1 &
-        spinner $(pidof make)
-    fi
-
-    if [ "$COMP" = "beamasm24" ]; then
-        cp results/compile_beam.res results/compile.res
-    fi
-
-    if [ "$COMP" = "beamasm25" ]; then
-        cp results/compile_beam.res results/compile.res
-    fi
-    
-    mv results/compile.res results/compile_$COMP.res
-
-}
-
 run_all ()
 {
     echo "Running all benchmark classes..."
 
     ## Look for all available Classes to run
-    for c in `find ebin/ -maxdepth 1 -mindepth 1 -type d`; do
+    for c in `find src/ -maxdepth 1 -mindepth 1 -type d`; do
         CLASS=`basename $c`
         run_class
     done
@@ -73,9 +43,17 @@ run_class ()
     if [ -r $BOILERPLATE ]; then
         skipped="$skipped `cat $BOILERPLATE`"
     fi
+        skipped=
 
-    for f in `ls ebin/$CLASS/*.beam`; do
+    local _BENCH_WILDCARD="ebin/$CLASS/*.beam"
+
+    if [ "$METRIC" = "compile" ]; then
+        _BENCH_WILDCARD="src/$CLASS/*.erl"   
+    fi
+
+    for f in `ls $_BENCH_WILDCARD`; do
         BENCH=`basename $f .beam`
+        BENCH=`basename $BENCH .erl`
         ## Skip file if in failing or boileprlate
         SKIP="no"
         for s in $skipped; do
@@ -98,8 +76,8 @@ run_benchmark ()
 
     EBIN_DIRS=`find ebin/ -maxdepth 1 -mindepth 1 -type d`
 
-    echo $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt +S 1
-    $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $BENCH $COMP $ITERATIONS -s erlang halt +S 1
+    echo $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $METRIC $CLASS $BENCH $COMP $ITERATIONS -s erlang halt +S 1
+    $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $METRIC $CLASS $BENCH $COMP $ITERATIONS -s erlang halt +S 1
 }
 
 collect_results ()
@@ -262,11 +240,6 @@ EOF
           touch results/$METRIC_$COMP.res
         fi
 
-        if [ "$METRIC" = "compile" ]; then
-            benchmark_compile
-            continue
-        fi
-
         echo -n "  Re-compiling with $COMP. "
         ## Use the appropriate ERLC flags
         ERL_CFLAGS=
@@ -276,7 +249,7 @@ EOF
         if [ "$COMP" = "erllvm" ]; then
             ERL_CFLAGS=$ERLLVM_FLAGS
         fi
-        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" \
+        make ERLC=$OTP_ROOT/otp_$COMP/bin/erlc ERL_COMPILE_FLAGS="$ERL_CFLAGS" METRIC=$METRIC \
             > /dev/null 2>&1 &
         spinner $(pidof make)
 
