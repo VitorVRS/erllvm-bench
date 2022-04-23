@@ -51,6 +51,10 @@ run_class ()
         _BENCH_WILDCARD="src/$CLASS/*.erl"   
     fi
 
+    if [ "$METRIC" = "size" ]; then
+        _BENCH_WILDCARD="src/$CLASS/*.erl"   
+    fi
+
     for f in `ls $_BENCH_WILDCARD`; do
         BENCH=`basename $f .beam`
         BENCH=`basename $BENCH .erl`
@@ -85,9 +89,14 @@ collect_results ()
     echo "Collecting results..."
 
     local _FILES=""
+    local _FILES_ERR=""
 
     for COMP in $OTP_LIST; do
         _FILES="${_FILES} results/${METRIC}_${COMP}.res"
+    done
+
+    for COMP in $OTP_LIST; do
+        _FILES_ERR="${_FILES_ERR} results/${METRIC}_${COMP}-err.res"
     done
 
     echo "### Benchmark BEAM/BEAMASM24  BEAM/BEAMASM25  BEAM/HIPE   BEAM/ERLLVM BEAM    BEAMASM24   BEAMASM25   HIPE    ERLLVM (secs)" \
@@ -99,16 +108,11 @@ collect_results ()
     awk '{btl += $2; htl += $3} END {print "Runtime BTL:", btl/(NR-1), \
         "Runtime HTL:", htl/(NR-1)}' results/$METRIC.res
 
-    if [ "$METRIC" = "compile" ]; then
-        return
-    fi
-
     echo "### Standard deviation BEAM BEAMASM24 BEAMASM25 (millisecs)" \
-        > results/runtime-err.res
-    pr -m -t results/runtime_beam-err.res results/runtime_beamasm24-err.res \
-        results/runtime_beamasm25-err.res results/runtime_hipe-err.res results/runtime_erllvm-err.res \
+        > results/$METRIC-err.res
+    pr -m -t $_FILES_ERR \
         | gawk '{print $1 "\t" $2 "\t" $4 "\t" $6 "\t" $8 "\t" $10}' \
-        >> results/runtime-err.res
+        >> results/$METRIC-err.res
 }
 
 plot_diagram ()

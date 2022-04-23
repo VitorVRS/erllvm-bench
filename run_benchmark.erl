@@ -63,7 +63,6 @@ run_bench(runtime, _Class, _Comp, File, N) when is_integer(N) ->
   end;
 
 run_bench(compile, Class, Comp, File, N) ->
-%    io:format("DEBUG: File: ~p~n", [lists:concat(["src/", Class, "/", File, ".erl"])]),
   ErlFile = lists:concat(["src/", Class, "/", File, ".erl"]),
   Myself = self(),
   Opts = [],
@@ -73,15 +72,15 @@ run_bench(compile, Class, Comp, File, N) ->
                 group_leader(F, self()),
                 %% Use a runner in order to catch the exiting exception.
                 Runner = fun () -> try
-                                       case Comp of
+                                       Options = case Comp of
                                            hipe ->
-                                               c:c(ErlFile, [native, {hipe, [{regalloc,coalescing},o2]}, {outdir, "ebin"}]);
+                                               [native, {hipe, [{regalloc,coalescing},o2]}, {outdir, "ebin"}];
                                            erllvm ->
-                                               c:c(ErlFile, [native, {hipe, [o2,to_llvm]}, {outdir, "ebin"}]);
-
+                                               [native, {hipe, [o2,to_llvm]}, {outdir, "ebin"}];
                                            _ ->
-                                               c:c(ErlFile, [{outdir, "ebin"}])
-                                       end
+                                               [{outdir, "ebin"}]
+                                       end,
+                                       compile:file(ErlFile, Options)
                                    catch
                                      exit:ok -> ok;
                                      _:_ -> badexit
@@ -93,4 +92,22 @@ run_bench(compile, Class, Comp, File, N) ->
             end, Opts),
   receive
     Result -> Result
-  end.
+  end;
+
+run_bench(size, Class, Comp, File, _N) ->
+  ErlFile = lists:concat(["src/", Class, "/", File, ".erl"]),
+  Options = case Comp of
+                hipe ->
+                    [native, {hipe, [{regalloc,coalescing},o2]}, {outdir, "ebin"}];
+                erllvm ->
+                    [native, {hipe, [o2,to_llvm]}, {outdir, "ebin"}];
+                _ ->
+                    [{outdir, "ebin"}]
+            end,
+  c:c(ErlFile, Options),
+  Size = File:module_info(size) / 1,
+  S = #stat{median = Size,
+            average = Size,
+            stddev = 0.0},
+  S.
+
