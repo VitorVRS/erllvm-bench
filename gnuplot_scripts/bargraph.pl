@@ -1105,6 +1105,9 @@ if ($debug_seegnuplot) {
     # we can read its output back using FIG filehandle
     $pid = open2(\*FIG, \*GNUPLOT, "$gnuplot_path") || die "Couldn't open2 gnuplot\n";
 }
+printf GNUPLOT "
+set style fill solid
+";
 
 printf GNUPLOT "
 set title '%s'

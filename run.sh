@@ -176,6 +176,11 @@ OPTIONS:
   -a    Run all available benchmarks (default)
   -c    Benchmark class to run
   -n    Number of iterations (default=$ITERATIONS)
+  -m    Metric to be collected (default=runtime)
+        Available options are:
+        * runtime
+        * compile (compilation time)
+        * size (code size loaded into memory)
 
 Examples:
   1) $0 -c shootout -n 3 ~/git/otp
@@ -186,7 +191,7 @@ EOF
 
 main ()
 {
-    while getopts "hadnm:c:" OPTION; do
+    while getopts "hadm:n:c:" OPTION; do
         case $OPTION in
             h|\?)
                 usage
