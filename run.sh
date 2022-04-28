@@ -74,14 +74,44 @@ run_class ()
     done
 }
 
+run_startup_benchmark()
+{
+    local _CMD=""
+    touch results/startup_$COMP.res
+    _CMD="perf stat --metric-only --log-fd 1 $OTP/bin/erl -pa ebin/ $1 -noshell -s $BENCH module_info -s erlang halt +S 1"
+    local _RESULTS=""
+    local _TMP=""
+    for a in $(seq 1 $ITERATIONS); do
+        _TMP=$($_CMD | grep 'seconds time elapsed' | cut -d ' ' -f 8 | sed -e "s/,/\./g")
+        _RESULTS="$_RESULTS $_TMP"
+    done
+    local _DATA=""
+    _DATA=$(echo $_RESULTS | tr -s " " "\n" | sort | awk 'NF > 0')
+
+    local _MEDIAN=""
+    _MEDIAN=$(echo $_DATA | tr -s " " "\n" | awk ' { a[i++]=$1; } END { x=int((i+1)/2); if (x < (i+1)/2) print (a[x-1]+a[x])/2; else print a[x-1]; }')
+
+    local _STDDEV=""
+    _STDDEV=$(echo $_DATA | tr -s " " "\n" | awk '{for(i=1;i<=NF;i++) {sum[i] += $i; sumsq[i] += ($i)^2}} END {for (i=1;i<=NF;i++) {printf "%f\n", sqrt((sumsq[i]-sum[i]^2/NR)/NR)}}')
+    echo "$BENCH    $_MEDIAN" >> results/startup_$COMP.res
+    echo "$BENCH    $_STDDEV" >> results/startup_$COMP-err.res
+}
+
 run_benchmark ()
 {
+    local _CMD=""
     echo "   --- $BENCH"
 
     EBIN_DIRS=`find ebin/ -maxdepth 1 -mindepth 1 -type d`
 
-    echo $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $METRIC $CLASS $BENCH $COMP $ITERATIONS -s erlang halt +S 1
-    $OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $METRIC $CLASS $BENCH $COMP $ITERATIONS -s erlang halt +S 1
+
+    if [ "$METRIC" = "startup" ]; then
+        run_startup_benchmark $EBIN_DIRS
+    else
+        _CMD="$OTP/bin/erl -pa ebin/ $EBIN_DIRS -noshell -s run_benchmark run $METRIC $CLASS $BENCH $COMP $ITERATIONS -s erlang halt +S 1"
+        echo $_CMD
+        $_CMD
+    fi
 }
 
 collect_results ()
@@ -108,9 +138,9 @@ collect_results ()
     awk '{btl += $2; htl += $3} END {print "Runtime BTL:", btl/(NR-1), \
         "Runtime HTL:", htl/(NR-1)}' results/$METRIC.res
 
-    echo "### Standard deviation BEAM BEAMASM24 BEAMASM25 (millisecs)" \
+    echo "### Standard deviation BEAM BEAMASM24 BEAMASM25   HIPE    ERLLVM (millisecs)" \
         > results/$METRIC-err.res
-    pr -m -t $_FILES_ERR \
+    pr -J -m -t $_FILES_ERR \
         | gawk '{print $1 "\t" $2 "\t" $4 "\t" $6 "\t" $8 "\t" $10}' \
         >> results/$METRIC-err.res
 }

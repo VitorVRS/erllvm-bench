@@ -25,7 +25,7 @@ endif
 .PHONY: all check clean distclean compile
 
 all: $(BEAM_FILES) fasta
-	if [ "$(METRIC)" = "runtime" ]; then \
+	if [ "$(METRIC)" = "runtime" ] || [ "$(METRIC)" = "startup" ]; then \
 		(cd src && make EBIN_DIR=../$(EBIN_DIR) ERLC=$(ERLC) ERL_COMPILE_FLAGS="$(ERL_COMPILE_FLAGS)" $@); \
 	fi
 
