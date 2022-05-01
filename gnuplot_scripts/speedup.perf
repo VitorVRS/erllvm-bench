@@ -2,11 +2,11 @@
 ### Clustered graph example from http://www.burningcutlery.com/derek/bargraph/
 ###
 =cluster;BEAM / BEAMASM24;BEAM / BEAMASM25;BEAM / HIPE;BEAM / ERLLVM
-colors=med_blue,light_green,red,black
+#colors=red,black,med_blue,light_green
 =arithmean
 meanlabel=Average
 yformat=%g
-ylabel=Runtime Speedup
+ylabel=Speedup
 xlabel=Benchmark
 horizline=1
 

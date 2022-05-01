@@ -43,7 +43,6 @@ run_class ()
     if [ -r $BOILERPLATE ]; then
         skipped="$skipped `cat $BOILERPLATE`"
     fi
-        skipped=
 
     local _BENCH_WILDCARD="ebin/$CLASS/*.beam"
 
@@ -78,7 +77,7 @@ run_startup_benchmark()
 {
     local _CMD=""
     touch results/startup_$COMP.res
-    _CMD="perf stat --metric-only --log-fd 1 $OTP/bin/erl -pa ebin/ $1 -noshell -s $BENCH module_info -s erlang halt +S 1"
+    _CMD="perf stat --metric-only --log-fd 1 $OTP/bin/erl -pa ebin/ $@ -noshell -s $BENCH module_info -s erlang halt +S 1"
     local _RESULTS=""
     local _TMP=""
     for a in $(seq 1 $ITERATIONS); do

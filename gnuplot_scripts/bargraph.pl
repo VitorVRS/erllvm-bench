@@ -1105,9 +1105,6 @@ if ($debug_seegnuplot) {
     # we can read its output back using FIG filehandle
     $pid = open2(\*FIG, \*GNUPLOT, "$gnuplot_path") || die "Couldn't open2 gnuplot\n";
 }
-printf GNUPLOT "
-set style fill solid
-";
 
 printf GNUPLOT "
 set title '%s'
@@ -1306,7 +1303,7 @@ $figcolorins|;
     # Convert rectangles with line style N to filled rectangles.
     # We put them at depth $plot_depth.
     # Look for '^2 1 ... 5' to indicate a full box w/ 5 points.
-    if (/^2 1 \S+ \S+ (\S+) \1 $plot_depth 0 -1(\s+\S+){6}\s+5/) {
+    if (/^2 1 \S+ \S+ (\S+) \S+ \S+ 0 -1(\s+\S+){6}\s+5/) {
         # Rather than hardcode the styles that gnuplot uses for fig (which has
         # changed), we assume the plots are in sequential order.
         # We assume that the coordinates are all on the subsequent line,
@@ -1331,20 +1328,20 @@ $figcolorins|;
             if ($set < $plotcount) {
                 $color_idx = $color_per_datum ? ($itemcount++ % ($#fillcolor+1)) :
                     $set;
-                s|^2 1 \S+ \S+ (\S+) \1 $plot_depth 0 -1 +([0-9]+).000|2 1 0 1 -1 $fillcolor[$color_idx] $depth[$set] 0 $fillstyle[$color_idx]     0.000|;
+                s|^2 1 \S+ \S+ (\S+) \S+ \S+ 0 -1 +([0-9]+).000|2 1 0 0 -1 $fillcolor[$color_idx] $depth[$set] 0 $fillstyle[$color_idx]     0.000|;
             } elsif (defined($xlate{$_})) {
                 $repeat = $xlate{$_};
                 $color_idx = $color_per_datum ? ($itemcount++ % ($#fillcolor+1)) :
                     $repeat;
                 # Handle later repeats, like for cluster of stacked
-                s|^2 1 \S+ \S+ (\S+) \1 $plot_depth 0 -1 +([0-9]+).000|2 1 0 1 -1 $fillcolor[$color_idx] $depth[$repeat] 0 $fillstyle[$color_idx]     0.000|;
+                s|^2 1 \S+ \S+ (\S+) \S+ \S+ 0 -1 +([0-9]+).000|2 1 0 1 -1 $fillcolor[$color_idx] $depth[$repeat] 0 $fillstyle[$color_idx]     0.000|;
             }
         }
     }
 
     if ($yerrorbars) {
         # increase thickness of dotted line errorbars
-        s|^2 1 (\S+) 1 0 0 $plot_depth 0 -1     4.000 0 (\S+) 0 0 0 2|2 1 $1 1 0 0 10 0 -1     0.000 0 $2 0 0 0 2|;
+        s|^2 1 (\S+) 1 0 0 \S+ 0 -1     4.000 0 (\S+) 0 0 0 2|2 1 $1 1 0 0 10 0 -1     0.000 0 $2 0 0 0 2|;
     }
 
     # Process and remove dummy strings to determine legend text bounds
